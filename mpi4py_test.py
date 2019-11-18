@@ -36,7 +36,4 @@ for i in range(iterations):
 if rank == 1:
     print(data)
 
-
-#print(rank)
-#print(data)
 print("I am finished my job")

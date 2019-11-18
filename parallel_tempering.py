@@ -1,18 +1,8 @@
-import pandas as pd
 import numpy as np
 from scipy.stats import norm
-import matplotlib.pyplot as plt
 from mpi4py import MPI
 import time
-
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-
-plot = True
-chosen_rank = 0
-
-if rank==chosen_rank:
-    starttime = time.time()
+import sys
 
 # set parameters for target/proposal distribution
 mu0 = 1
@@ -21,7 +11,10 @@ mu1 = 50
 target_sigma0 = 1
 target_sigma1 = 2
 
+init_sol = 10
 proposal_sigma = 1
+
+# initialization of functions
 
 # target distribution: normal case
 f = lambda x: norm(mu0, target_sigma0).pdf(x)
@@ -32,17 +25,18 @@ def energy(x):
         return -1e10
     else:
         return -np.log(f(x))
-# target distribution: binormal case
+
+# target distribution: bimodal case
 # f = lambda x: norm(mu0, target_sigma0).pdf(x) + norm(mu1, target_sigma1).pdf(x)
 # energy = lambda x: -np.log(f(x))
 
-#Proposal distribution: bivariate normal distribution
+# Proposal distribution: normal distribution
 proposal = lambda x: np.random.normal(x, proposal_sigma)
 
-init_sol = 10
-num_epochs=50000
-
 def metropolis_hastings(old_solution, new_solution, old_energy, new_energy, temp):
+    """
+    Metropolis-Hastings accept-reject framework
+    """
     #compute a probability for accpeting new solution
     alpha = min(1, np.exp((old_energy - new_energy) / temp))
 
@@ -58,7 +52,9 @@ def metropolis_hastings(old_solution, new_solution, old_energy, new_energy, temp
         return accepted, old_solution, old_energy
 
 def exchange(old_solution, energy, old_energy, temp):
-    # new_solution = np.array([0])
+    """
+    Implementation of exchange
+    """
     exchanged = 0
     if rank > 0:
         comm.send(old_solution, dest=rank-1, tag=13)
@@ -70,6 +66,9 @@ def exchange(old_solution, energy, old_energy, temp):
     return exchanged, old_solution, old_energy
 
 def parallel_tempering(energy, proposal, init_sol, epochs, temp):
+    """
+    Implementation of parallel tempering with exchange using a metropolis-hastings accept-reject framework
+    """
     accumulator = []
 
     old_solution = init_sol
@@ -100,35 +99,32 @@ def parallel_tempering(energy, proposal, init_sol, epochs, temp):
 
     return np.array(accumulator), float(total_accepted/epochs), float(total_exchanged/(epochs/exchanged_interval))
 
-temp = 2*rank + 0.1
-accumulator, ratio_accept, ratio_exchange = parallel_tempering(energy, proposal, init_sol, epochs=num_epochs, temp=temp)
-print(f"acceptance for temp={temp}: {ratio_accept*100:.2f}%, exchange: {ratio_exchange*100:.2f}%")
+if __name__ == '__main__':
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
 
-comm.barrier()
+    chosen_rank = 0
 
-if rank==chosen_rank:
-    endtime = time.time() - starttime
-    print(f'Total time: {endtime}')
+    if rank == chosen_rank:
+        starttime = time.time()
 
-    if plot == True:
-        fig, ax = plt.subplots(ncols=3, figsize=(20,5))
+    try:
+        num_epochs = int(sys.argv[1])
+        assert num_epochs > 0
 
-        ax[0].plot(range(num_epochs), accumulator[:,0])
-        ax[0].set_title("traceplot of samples")
-        ax[0].set_ylabel("sample value")
-        ax[0].set_xlabel("number of iterations")
+    except:
+        print('err')
+        num_epochs = 10
 
-        ax[1].plot(range(num_epochs), accumulator[:,1])
-        ax[1].set_title("traceplot of energy function")
-        ax[1].set_ylabel("energy function value")
-        ax[1].set_xlabel("number of iterations")
+    temp = 2*rank + 0.1
+    accumulator, ratio_accept, ratio_exchange = parallel_tempering(energy, proposal, init_sol, epochs=num_epochs, temp=temp)
+    print(f'acceptance for temp={temp}: {ratio_accept*100:.2f}%, exchange: {ratio_exchange*100:.2f}%')
 
-        ax[2].hist(accumulator[:,0], bins=30,density=True)
-        xgrid = np.linspace(np.min(accumulator[:,0]),np.max(accumulator[:,0]),200)
-        ax[2].plot(xgrid, f(xgrid), label="f(x)")
-        ax[2].set_title("Samples histogram")
-        ax[2].set_ylabel("normalized frequency")
-        ax[2].set_xlabel("sample value")
+    comm.barrier()
 
-        ax[2].legend()
-        plt.show()
+    if rank == chosen_rank:
+        endtime = time.time() - starttime
+        print(f'Total time: {endtime}')
+
+    # writing files
+    np.save(f'results/process_{rank}.npy', accumulator)
