@@ -4,6 +4,8 @@ from mpi4py import MPI
 import time
 import sys
 
+np.random.seed(289)
+
 # set parameters for target/proposal distribution
 mu0 = 1
 mu1 = 50
@@ -11,7 +13,7 @@ mu1 = 50
 target_sigma0 = 1
 target_sigma1 = 2
 
-init_sol = 10
+init_sol = np.random.choice(10,4)
 proposal_sigma = 1
 
 # initialization of functions
@@ -71,12 +73,12 @@ def parallel_tempering(energy, proposal, init_sol, epochs, temp):
     """
     accumulator = []
 
-    old_solution = init_sol
+    old_solution = init_sol[rank]
     old_energy = energy(old_solution)
 
     total_exchanged=0
     total_accepted=0
-    exchanged_interval = int(epochs/1)
+    exchanged_interval = int(epochs/10)
 
     for epoch in range(epochs):
         if epoch % exchanged_interval == 0 and epoch > 0:
