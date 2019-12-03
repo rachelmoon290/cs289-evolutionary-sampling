@@ -7,19 +7,16 @@ import sys
 np.random.seed(289)
 
 # set parameters for target/proposal distribution
-mu0 = 1
-mu1 = 50
+# mu0 = 1
+# mu1 = 10
 
-target_sigma0 = 1
-target_sigma1 = 2
-
-init_sol = np.random.choice(10,4)
-proposal_sigma = 1
+# target_sigma0 = 1
+# target_sigma1 = 2
 
 # initialization of functions
 
 # target distribution: normal case
-f = lambda x: norm(mu0, target_sigma0).pdf(x)
+# f = lambda x: norm(mu0, target_sigma0).pdf(x)
 # energy = lambda x: -np.log(f(x))
 
 def energy(x):
@@ -29,8 +26,15 @@ def energy(x):
         return -np.log(f(x))
 
 # target distribution: bimodal case
-# f = lambda x: norm(mu0, target_sigma0).pdf(x) + norm(mu1, target_sigma1).pdf(x)
-# energy = lambda x: -np.log(f(x))
+# f = lambda x: 0.5*norm(mu0, target_sigma0).pdf(x) + 0.5*norm(mu1, target_sigma1).pdf(x)
+
+mu0, mu1, mu2, mu3 = -10,0,10,30
+sig0, sig1, sig2, sig3 = 1, 2, 2, 1
+
+proposal_sigma = 1
+
+# target distribution: difficult normal case
+f = lambda x: 0.25*norm(mu0, sig0).pdf(x) + 0.25*norm(mu1, sig1).pdf(x) + 0.25*norm(mu2, sig2).pdf(x) + 0.25*norm(mu3, sig3).pdf(x)
 
 # Proposal distribution: normal distribution
 proposal = lambda x: np.random.normal(x, proposal_sigma)
@@ -78,13 +82,15 @@ def parallel_tempering(energy, proposal, init_sol, epochs, temp):
 
     total_exchanged=0
     total_accepted=0
-    exchanged_interval = int(epochs/10)
+    total_exchange_attempts=0
+    # exchanged_interval = int(epochs/1000)
 
     for epoch in range(epochs):
-        if epoch % exchanged_interval == 0 and epoch > 0:
+        if epoch % 5 == 0 and epoch > 0:
             comm.barrier()
             exchanged, old_solution, old_energy = exchange(np.array(old_solution), energy, old_energy, temp)
             total_exchanged += exchanged
+            total_exchange_attempts += 1
 
         #propose new solution based on current solution
         new_solution = proposal(old_solution)
@@ -99,11 +105,17 @@ def parallel_tempering(energy, proposal, init_sol, epochs, temp):
         old_energy = mh_energy
         old_solution = mh_solution
 
-    return np.array(accumulator), float(total_accepted/epochs), float(total_exchanged/(epochs/exchanged_interval))
+    return np.array(accumulator), float(total_accepted/epochs), float(total_exchanged/total_exchange_attempts)
 
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+
+    num_chains = comm.Get_size()
+
+    # initial solution
+    #init_sol = np.random.choice(20,num_chains)
+    init_sol = np.random.randint(-10,20,size=num_chains)
 
     chosen_rank = 0
 
@@ -118,7 +130,8 @@ if __name__ == '__main__':
         print('err')
         num_epochs = 10
 
-    temp = 2*rank + 0.1
+    # intialize temperature
+    temp = rank + 1
     accumulator, ratio_accept, ratio_exchange = parallel_tempering(energy, proposal, init_sol, epochs=num_epochs, temp=temp)
     print(f'acceptance for temp={temp}: {ratio_accept*100:.2f}%, exchange: {ratio_exchange*100:.2f}%')
 
