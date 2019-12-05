@@ -7,12 +7,12 @@ import sys
 np.random.seed(289)
 
 # set target distribution
-mu0, mu1 = 1, 10
+# mu0, mu1 = 1, 10
 
-target_sigma0, target_sigma1 = 1,2
+# target_sigma0, target_sigma1 = 1,2
 
 # target distribution: normal case
-f = lambda x: norm(mu0, target_sigma0).pdf(x)
+# f = lambda x: norm(mu0, target_sigma0).pdf(x)
 
 # target distribution: bimodal case
 # f = lambda x: 0.5*norm(mu0, target_sigma0).pdf(x) + 0.5*norm(mu1, target_sigma1).pdf(x)
@@ -25,11 +25,11 @@ def energy(x):
         return -np.log(f(x))
 
 
-# mu0, mu1, mu2, mu3 = -10,0,10,30
-# sig0, sig1, sig2, sig3 = 1, 2, 2, 1
+mu0, mu1, mu2, mu3 = -10,0,10,30
+sig0, sig1, sig2, sig3 = 1, 2, 2, 1
 
-# # target distribution: difficult normal case
-# f = lambda x: 0.25*norm(mu0, sig0).pdf(x) + 0.25*norm(mu1, sig1).pdf(x) + 0.25*norm(mu2, sig2).pdf(x) + 0.25*norm(mu3, sig3).pdf(x)
+# target distribution: difficult normal case
+f = lambda x: 0.25*norm(mu0, sig0).pdf(x) + 0.25*norm(mu1, sig1).pdf(x) + 0.25*norm(mu2, sig2).pdf(x) + 0.25*norm(mu3, sig3).pdf(x)
 
 
 # Set proposal distribution: normal distribution
@@ -63,7 +63,7 @@ def exchange(old_solution, energy, old_energy, temp):
     exchanged = 0
     if rank > 0:
         comm.send(old_solution, dest=rank-1, tag=13)
-    if rank < 3:
+    if rank < num_chains - 1:
         new_solution = comm.recv(source=rank+1, tag=13)
         new_energy = energy(new_solution)
         exchanged, old_solution, old_energy = metropolis_hastings(old_solution, new_solution, old_energy, new_energy, temp)
@@ -71,15 +71,15 @@ def exchange(old_solution, energy, old_energy, temp):
     return exchanged, old_solution, old_energy
 
 
-def respawn(accumulator, old_solution, old_energy):
-    respawned = 0
-    recent_energy_vals = [element[1] for element in accumulator[-(respawn_rate):-1]]
-    if np.mean(recent_energy_vals) < -10 and rank !=0: # if samples are in general producing low energy for past few iterations
-        new_solution = np.random.randint(-20,20) # respawn at new initial point
-        new_energy = energy(new_solution)
-        respawned, old_solution, old_energy = metropolis_hastings(old_solution, new_solution, old_energy, new_energy, temp)
+# def respawn(accumulator, old_solution, old_energy):
+#     respawned = 0
+#     recent_energy_vals = [element[1] for element in accumulator[-(respawn_rate):-1]]
+#     if np.mean(recent_energy_vals) < -10 and rank !=0: # if samples are in general producing low energy for past few iterations
+#         new_solution = np.random.randint(-20,20) # respawn at new initial point
+#         new_energy = energy(new_solution)
+#         respawned, old_solution, old_energy = metropolis_hastings(old_solution, new_solution, old_energy, new_energy, temp)
 
-    return old_solution, old_energy, respawned
+#     return old_solution, old_energy, respawned
 
 
 def respawn(accumulator, old_solution, old_energy):
@@ -163,11 +163,13 @@ if __name__ == '__main__':
         print('err')
         num_epochs = 10
 
-    # intialize parameters
+    # intialize temperature
     if rank==0: 
         temp = 1
     else:
-        temp = rank + 0.3
+        temp = rank * 1.5
+
+
     exchange_rate = 50
     respawn_rate = 100
 

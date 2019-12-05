@@ -7,16 +7,16 @@ import sys
 np.random.seed(289)
 
 # set parameters for target/proposal distribution
-mu0 = 1
-mu1 = 10
+# mu0 = 1
+# mu1 = 10
 
-target_sigma0 = 1
-target_sigma1 = 2
+# target_sigma0 = 1
+# target_sigma1 = 2
 
 # initialization of functions
 
 # target distribution: normal case
-f = lambda x: norm(mu0, target_sigma0).pdf(x)
+# f = lambda x: norm(mu0, target_sigma0).pdf(x)
 
 def energy(x):
     if f(x) < 1e-20:
@@ -25,12 +25,12 @@ def energy(x):
         return -np.log(f(x))
 
 # target distribution: bimodal case
-f = lambda x: 0.5*norm(mu0, target_sigma0).pdf(x) + 0.5*norm(mu1, target_sigma1).pdf(x)
+# f = lambda x: 0.5*norm(mu0, target_sigma0).pdf(x) + 0.5*norm(mu1, target_sigma1).pdf(x)
 
 # # target distribution: difficult normal case
-# mu0, mu1, mu2, mu3 = -10,0,10,30
-# sig0, sig1, sig2, sig3 = 1, 2, 2, 1
-# f = lambda x: 0.25*norm(mu0, sig0).pdf(x) + 0.25*norm(mu1, sig1).pdf(x) + 0.25*norm(mu2, sig2).pdf(x) + 0.25*norm(mu3, sig3).pdf(x)
+mu0, mu1, mu2, mu3 = -10,0,10,30
+sig0, sig1, sig2, sig3 = 1, 2, 2, 1
+f = lambda x: 0.25*norm(mu0, sig0).pdf(x) + 0.25*norm(mu1, sig1).pdf(x) + 0.25*norm(mu2, sig2).pdf(x) + 0.25*norm(mu3, sig3).pdf(x)
 
 # Proposal distribution: normal distribution
 proposal_sigma = 1
@@ -83,7 +83,7 @@ def parallel_tempering(energy, proposal, init_sol, epochs, temp):
     # exchanged_interval = int(epochs/1000)
 
     for epoch in range(epochs):
-        if epoch % 500 == 0 and epoch > 0:
+        if epoch % 50 == 0 and epoch > 0:
             comm.barrier()
             exchanged, old_solution, old_energy = exchange(np.array(old_solution), energy, old_energy, temp)
             total_exchanged += exchanged
