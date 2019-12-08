@@ -58,62 +58,18 @@ def metropolis_hastings(old_solution, new_solution, old_energy, new_energy, temp
         accepted = 0
         return accepted, old_solution, old_energy
 
-
-
-def metropolis_hastings_exchange(old_solution, new_solution, old_energy, new_energy, temp):
+def single_chain_sampling(energy, proposal, init_sol, epochs, temp):
     """
-    Metropolis-Hastings accept-reject framework for exchange
-    """
-
-    #compute a probability for accepting new solution
-    alpha = min(1, np.exp((old_energy - new_energy) * (1/temp_list[rank] - 1/temp_list[rank+1]) ))
-
-
-    #MH sampling
-    if np.random.uniform() < alpha:
-        #update everything if new solution accepted
-        accepted = 1
-        return accepted, new_solution, new_energy
-
-    else:
-        # Keep the old stuff if new solution not accepted
-        accepted = 0
-        return accepted, old_solution, old_energy
-
-def exchange(old_solution, energy, old_energy, temp):
-    """
-    Implementation of exchange
-    """
-    exchanged = 0
-    if rank > 0:
-        comm.send(old_solution, dest=rank-1)
-    if rank < num_chains-1:
-        new_solution = comm.recv(source=rank+1)
-        new_energy = energy(new_solution)
-        # exchanged, old_solution, old_energy = metropolis_hastings(old_solution, new_solution, old_energy, new_energy, temp)
-        exchanged, old_solution, old_energy = metropolis_hastings_exchange(old_solution, new_solution, old_energy, new_energy, temp)
-    return exchanged, old_solution, old_energy
-
-def parallel_tempering(energy, proposal, init_sol, epochs, temp, exchange_rate):
-    """
-    Implementation of parallel tempering with exchange using a metropolis-hastings accept-reject framework
+    Implementation of single chain sampling with exchange using a metropolis-hastings accept-reject framework
     """
     accumulator = []
 
     old_solution = init_sol[rank]
     old_energy = energy(old_solution)
 
-    total_exchanged=0
     total_accepted=0
-    total_exchange_attempts=0
-    # exchanged_interval = int(epochs/1000)
 
     for epoch in range(epochs):
-        if epoch % exchange_rate == 0 and epoch > 0:
-            comm.barrier()
-            exchanged, old_solution, old_energy = exchange(np.array(old_solution), energy, old_energy, temp)
-            total_exchanged += exchanged
-            total_exchange_attempts += 1
 
         #propose new solution based on current solution
         new_solution = proposal(old_solution)
@@ -128,7 +84,7 @@ def parallel_tempering(energy, proposal, init_sol, epochs, temp, exchange_rate):
         old_energy = mh_energy
         old_solution = mh_solution
 
-    return np.array(accumulator), float(total_accepted/epochs), float(total_exchanged/total_exchange_attempts)
+    return np.array(accumulator), float(total_accepted/epochs)
 
 
 
@@ -147,7 +103,6 @@ if __name__ == '__main__':
     if rank == chosen_rank:
         starttime = time.time()
 
-    
 
     # get cmd argument inputs
     try:
@@ -175,8 +130,8 @@ if __name__ == '__main__':
     # else:
     #     temp = rank * 1.5
     
-    accumulator, ratio_accept, ratio_exchange = parallel_tempering(energy, proposal, init_sol, epochs=num_epochs, temp=temp, exchange_rate = exchange_rate)
-    print(f'Agent {rank} [T ={temp}] accepted: {ratio_accept*100:.2f}%, received: {ratio_exchange*100:.2f}%')
+    accumulator, ratio_accept = single_chain_sampling(energy, proposal, init_sol, epochs=num_epochs, temp=temp)
+    print(f'Agent {rank} [T ={temp}] accepted: {ratio_accept*100:.2f}%')
 
     # wait until everyone is finished
     comm.barrier()
@@ -186,4 +141,4 @@ if __name__ == '__main__':
         print(f'Total time elapsed: {endtime} seconds')
 
     # write results
-    np.save(f'results/{data_folder}/parallel_tempering/process_{rank}.npy', accumulator)
+    np.save(f'results/{data_folder}/single_chain/process_{rank}.npy', accumulator)
