@@ -20,7 +20,7 @@ def log_joint(W):
 energy = lambda w: -log_joint(w)
 
 # Proposal distribution: normal distribution
-proposal = lambda p: np.random.normal(p.flatten(), 0.05*np.ones(shape=16), size=16).reshape(1,-1)
+proposal = lambda p: np.random.normal(p.flatten(), 0.001*temp*np.ones(shape=nn.D), size=nn.D).reshape(1,-1)
 
 def metropolis_hastings(old_solution, new_solution, old_energy, new_energy, temp):
     """
@@ -45,6 +45,9 @@ def exchange(old_solution, energy, old_energy, temp):
     Implementation of exchange
     """
     exchanged = 0
+    if num_chains == 1:
+        return exchanged, old_solution, old_energy
+
     if rank > 0:
         comm.send(old_solution, dest=rank-1, tag=13)
     if rank < num_chains -1:
@@ -66,10 +69,9 @@ def parallel_tempering(energy, proposal, init_sol, epochs, temp):
     total_exchanged = 0
     total_accepted = 0
     total_exchange_attempts = 0 if epochs > 1000 else 1
-    exchanged_interval = int(epochs/1000)
 
     for epoch in range(epochs):
-        if epoch % 50 == 0 and epoch > 0:
+        if epoch % 5 == 0 and epoch > 0:
             comm.barrier()
             exchanged, old_solution, old_energy = exchange(np.array(old_solution), energy, old_energy, temp)
             total_exchanged += exchanged
@@ -97,9 +99,13 @@ if __name__ == '__main__':
 
     num_chains = comm.Get_size()
 
-    data = pd.read_csv('data/data.csv')
-    x = data['x'].values
-    y = data['y'].values
+    def gramacy_lee_1d(x):
+        return np.sin(10*np.pi*x)/(2*x) + (x-1)**4
+
+    xmin = -0.5
+    xmax = 2.5
+    x = np.linspace(-0.5,2.5,10000)
+    y = gramacy_lee_1d(x)
 
     # define rbf activation function
     alpha = 1
@@ -107,8 +113,8 @@ if __name__ == '__main__':
     h = lambda x: grad_np.exp(-alpha * (x - c)**2)
 
     # neural network model design choices
-    width = 5
-    hidden_layers = 1
+    width = 15
+    hidden_layers = 2
     input_dim = 1
     output_dim = 1
 
@@ -136,7 +142,7 @@ if __name__ == '__main__':
     nn.fit(x.reshape((1, -1)), y.reshape((1, -1)), params)
 
     # initial solution
-    init_sol = nn.weights
+    init_sol = np.random.normal(size=nn.D)
 
     chosen_rank = 0
 
@@ -155,7 +161,7 @@ if __name__ == '__main__':
     if rank==0:
         temp = 1
     else:
-        temp = rank * 1.5
+        temp = 1.5*rank
 
     accumulator, ratio_accept, ratio_exchange = parallel_tempering(energy, proposal, init_sol, epochs=num_epochs, temp=temp)
     print(f'acceptance for temp={temp}: {ratio_accept*100:.2f}%, exchange: {ratio_exchange*100:.2f}%')
@@ -170,13 +176,13 @@ if __name__ == '__main__':
         energy = accumulator[:,1]
         final_samples = np.array([val[0] for val in values])
         n = 100
-        num_pts = 100
+        num_pts = 1000
         all_ys = np.zeros(shape=(n, num_pts))
 
         for i in range(n):
             ind = np.random.randint(0, final_samples.shape[0])
             sample = final_samples[ind]
-            x_test = np.linspace(-8, 8, num_pts)
+            x_test = np.linspace(xmin, xmax, num_pts)
             noise = np.random.normal(scale=0.5, size=num_pts)
 
             y_test = nn.forward(sample.reshape(1,-1), x_test.reshape((1, -1))).flatten() + noise
